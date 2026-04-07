@@ -74,7 +74,17 @@ def search_breed(breed_id):
         JSON body as a dict (with a top-level 'data' key on success), OR None if the
         request failed or the response does not represent a successful breed lookup.
     """
-    pass
+    url = f"https://dogapi.dog/api/v2/breeds/{breed_id}"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an error for bad status codes
+        parsed_json = response.json()
+        if 'data' in parsed_json and parsed_json['data'] is not None:
+            return (parsed_json, url)
+        else:
+            return None
+    except (requests.RequestException, json.JSONDecodeError):
+        return None
 
 
 def update_cache(breed_ids, cache_file):
@@ -91,7 +101,22 @@ def update_cache(breed_ids, cache_file):
         A string: "Cached data for {percentage}% of breeds",
         where percentage = (successful_new_adds / len(breed_ids)) * 100.
     """
-    pass
+    cache = load_json(cache_file)
+    successful_new_adds = 0
+
+    for breed_id in breed_ids:
+        url = f"https://dogapi.dog/api/v2/breeds/{breed_id}"
+        if url not in cache:
+            result = search_breed(breed_id)
+            if result is not None:
+                parsed_json, _ = result
+                cache[url] = parsed_json
+                successful_new_adds += 1
+
+    create_cache(cache, cache_file)
+
+    percentage = (successful_new_adds / len(breed_ids)) * 100 if breed_ids else 0
+    return f"Cached data for {percentage}% of breeds"
 
 
 def get_longest_lifespan_breed(cache_file):
@@ -106,7 +131,19 @@ def get_longest_lifespan_breed(cache_file):
         A tuple (breed_name, max_lifespan_integer) for the winning breed, OR the
         string "No breeds found" if no breed in the cache has a life.max value.
     """
-    pass
+    cache = load_json(cache_file)
+    max_lifespan = -1
+    longest_breed_name = "No breeds found"
+
+    for breed_data in cache.values():
+        if 'data' in breed_data and breed_data['data'] is not None:
+            attributes = breed_data['data'].get('attributes', {})
+            lifespan = attributes.get('life', {}).get('max', -1)
+            if lifespan > max_lifespan:
+                max_lifespan = lifespan
+                longest_breed_name = attributes.get('name', 'Unknown')
+
+    return (longest_breed_name, max_lifespan) if max_lifespan != -1 else ("No breeds found", -1)
 
 
 def get_groups_above_cutoff(cutoff, cache_file):
